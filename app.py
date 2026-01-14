@@ -46,6 +46,9 @@ Hula helps users create amazing AI-generated photos and videos. I'd love to lear
 To start, could you tell me: Do you currently use any AI tools for creating photos or videos?"""
     
     st.session_state.messages.append({"role": "model", "parts": [welcome_message]})
+
+if "last_audio" not in st.session_state:
+    st.session_state.last_audio = ""
     
 if "system_prompt" not in st.session_state:
     st.session_state.system_prompt = load_prompt()
@@ -61,8 +64,32 @@ if "model" not in st.session_state:
 for message in st.session_state.messages:
     role = "user" if message["role"] == "user" else "assistant"
     content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
-    with st.chat_message(role):
-        st.markdown(content)
+    with st.chat_message(role):        st.markdown(content)
+
+# Custom CSS для улучшения визуала
+st.markdown("""
+<style>
+    .element-container:has(iframe) {
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    .stChatInputContainer {
+        padding-top: 0px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Input area - text field and voice button side by side
+col1, col2 = st.columns([11, 1])
+
+with col1:
+    prompt = st.chat_input("Message")
+
+with col2:
+    audio_base64 = components.html(
+        open("components/audio_recorder.html", "r").read(),
+        height=56,
+    )
 
 # Input area with text input and voice recorder side by side
 col1, col2 = st.columns([5, 1])
@@ -98,9 +125,11 @@ if prompt:
             message_placeholder.error(f"Error: {str(e)}")
 
 # Handle voice input
-if audio_base64 is not None and audio_base64 != "":
+if audio_base64 is not None and audio_base64 != "" and audio_base64 != st.session_state.get("last_audio", ""):
+    st.session_state["last_audio"] = audio_base64  # Предотвращаем повторную обработку
+    
     with st.chat_message("user"):
-        st.write("🎤 Voice message received")
+        st.write("🎤 Voice message")
     
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
@@ -120,11 +149,15 @@ if audio_base64 is not None and audio_base64 != "":
             full_response = response.text
             message_placeholder.markdown(full_response)
             
+            st.session_state.messages.append({"role": "user", "parts": ["🎤 Voice message"]})
             st.session_state.messages.append({"role": "model", "parts": [full_response]})
             
+            # Clean up
+            os.remove("temp_audio.wav")
+            st.rerun()
+            
         except Exception as e:
-            message_placeholder.error(f"Error: {str(e)}")
-
+            message_placeholder.error(f"Error processing audio: {str(e)}")
 with st.sidebar:
     st.header("Chat Controls")
     

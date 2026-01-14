@@ -2,40 +2,49 @@
 <html>
 <head>
     <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
         .recorder-container {
-            padding: 20px;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .record-btn {
-            background-color: #ff4b4b;
-            color: white;
+            background-color: transparent;
             border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            border-radius: 5px;
+            font-size: 28px;
             cursor: pointer;
-            margin: 10px;
+            padding: 8px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .record-btn:hover {
+            background-color: rgba(255, 75, 75, 0.1);
         }
         .record-btn.recording {
-            background-color: #4CAF50;
+            background-color: rgba(76, 175, 80, 0.2);
             animation: pulse 1.5s infinite;
         }
         @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        .status {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #666;
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
         }
     </style>
 </head>
 <body>
     <div class="recorder-container">
-        <button id="recordBtn" class="record-btn">🎤 Click to Record</button>
-        <div id="status" class="status"></div>
+        <button id="recordBtn" class="record-btn" title="Record voice message">🎤</button>
     </div>
 
     <script>
@@ -44,7 +53,6 @@
         let isRecording = false;
 
         const recordBtn = document.getElementById('recordBtn');
-        const status = document.getElementById('status');
 
         recordBtn.addEventListener('click', toggleRecording);
 
@@ -74,19 +82,17 @@
                     
                     mediaRecorder.start();
                     isRecording = true;
-                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.textContent = '⏹️';
                     recordBtn.classList.add('recording');
-                    status.textContent = 'Recording...';
                 } catch (error) {
-                    status.textContent = 'Error: ' + error.message;
+                    console.error('Error: ' + error.message);
                 }
             } else {
                 mediaRecorder.stop();
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
                 isRecording = false;
-                recordBtn.textContent = '🎤 Click to Record';
+                recordBtn.textContent = '🎤';
                 recordBtn.classList.remove('recording');
-                status.textContent = 'Processing...';
             }
         }
     </script>
