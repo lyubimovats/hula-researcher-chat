@@ -57,18 +57,47 @@ if "model" not in st.session_state:
     )
     st.session_state.chat = st.session_state.model.start_chat(history=[])
 
+# Display chat messages
 for message in st.session_state.messages:
     role = "user" if message["role"] == "user" else "assistant"
     content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
     with st.chat_message(role):
         st.markdown(content)
-# Voice recorder
-st.write("### 🎤 Record a voice message")
-audio_base64 = components.html(
-    open("components/audio_recorder.html", "r").read(),
-    height=150,
-)
 
+# Input area with text input and voice recorder side by side
+col1, col2 = st.columns([5, 1])
+
+with col1:
+    prompt = st.chat_input("Type your message or use voice 🎤")
+
+with col2:
+    st.write("")  # Add some spacing to align with chat input
+    audio_base64 = components.html(
+        open("components/audio_recorder.html", "r").read(),
+        height=50,
+    )
+
+# Handle text input
+if prompt:
+    st.session_state.messages.append({"role": "user", "parts": [prompt]})
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        
+        try:
+            response = st.session_state.chat.send_message(prompt)
+            full_response = response.text
+            message_placeholder.markdown(full_response)
+            
+            st.session_state.messages.append({"role": "model", "parts": [full_response]})
+            
+        except Exception as e:
+            message_placeholder.error(f"Error: {str(e)}")
+
+# Handle voice input
 if audio_base64 is not None and audio_base64 != "":
     with st.chat_message("user"):
         st.write("🎤 Voice message received")
@@ -88,24 +117,6 @@ if audio_base64 is not None and audio_base64 != "":
             uploaded_file = genai.upload_file(path="temp_audio.wav")
             response = st.session_state.chat.send_message(["Transcribe this audio and respond to what the person said:", uploaded_file])
             
-            full_response = response.text
-            message_placeholder.markdown(full_response)
-            
-            st.session_state.messages.append({"role": "model", "parts": [full_response]})
-            
-        except Exception as e:
-            message_placeholder.error(f"Error: {str(e)}")
-if prompt := st.chat_input("Share your thoughts..."):
-    st.session_state.messages.append({"role": "user", "parts": [prompt]})
-    
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        
-        try:
-            response = st.session_state.chat.send_message(prompt)
             full_response = response.text
             message_placeholder.markdown(full_response)
             
