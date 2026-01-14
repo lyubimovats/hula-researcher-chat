@@ -1,4 +1,6 @@
 import streamlit as st
+import streamlit.components.v1 as components
+import base64
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -60,24 +62,31 @@ for message in st.session_state.messages:
     content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
     with st.chat_message(role):
         st.markdown(content)
-# Audio upload
-audio_file = st.file_uploader("Or upload an audio file", type=['wav', 'mp3', 'ogg', 'm4a'])
+# Voice recorder
+st.write("### 🎤 Record a voice message")
+audio_base64 = components.html(
+    open("components/audio_recorder.html", "r").read(),
+    height=150,
+)
 
-if audio_file is not None:
+if audio_base64 is not None and audio_base64 != "":
     with st.chat_message("user"):
-        st.audio(audio_file)
+        st.write("🎤 Voice message received")
     
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         
         try:
-            # Save audio temporarily
+            # Decode base64 audio
+            audio_bytes = base64.b64decode(audio_base64)
+            
+            # Save temporarily
             with open("temp_audio.wav", "wb") as f:
-                f.write(audio_file.getbuffer())
+                f.write(audio_bytes)
             
             # Upload to Gemini
             uploaded_file = genai.upload_file(path="temp_audio.wav")
-            response = st.session_state.chat.send_message(["Transcribe and respond:", uploaded_file])
+            response = st.session_state.chat.send_message(["Transcribe this audio and respond to what the person said:", uploaded_file])
             
             full_response = response.text
             message_placeholder.markdown(full_response)
@@ -86,7 +95,6 @@ if audio_file is not None:
             
         except Exception as e:
             message_placeholder.error(f"Error: {str(e)}")
-
 if prompt := st.chat_input("Share your thoughts..."):
     st.session_state.messages.append({"role": "user", "parts": [prompt]})
     
