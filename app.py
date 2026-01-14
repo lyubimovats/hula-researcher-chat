@@ -1,5 +1,4 @@
 import streamlit as st
-from audiorecorder import audiorecorder
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -61,19 +60,24 @@ for message in st.session_state.messages:
     content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
     with st.chat_message(role):
         st.markdown(content)
-# Audio recorder
-audio_data = audiorecorder("Click to record", "Recording...")
-if audio_data is not None:
+# Audio upload
+audio_file = st.file_uploader("Or upload an audio file", type=['wav', 'mp3', 'ogg', 'm4a'])
+
+if audio_file is not None:
     with st.chat_message("user"):
-        st.audio(audio_data, format='audio/wav')
+        st.audio(audio_file)
     
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         
         try:
-            # Upload audio to Gemini
-            audio_file = genai.upload_file(path=audio_data)
-            response = st.session_state.chat.send_message(["Transcribe and respond to this:", audio_file])
+            # Save audio temporarily
+            with open("temp_audio.wav", "wb") as f:
+                f.write(audio_file.getbuffer())
+            
+            # Upload to Gemini
+            uploaded_file = genai.upload_file(path="temp_audio.wav")
+            response = st.session_state.chat.send_message(["Transcribe and respond:", uploaded_file])
             
             full_response = response.text
             message_placeholder.markdown(full_response)
@@ -82,7 +86,6 @@ if audio_data is not None:
             
         except Exception as e:
             message_placeholder.error(f"Error: {str(e)}")
-
 
 if prompt := st.chat_input("Share your thoughts..."):
     st.session_state.messages.append({"role": "user", "parts": [prompt]})
