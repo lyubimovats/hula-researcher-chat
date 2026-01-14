@@ -1,12 +1,12 @@
 import streamlit as st
-import anthropic
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def load_prompt():
     with open("prompts/researcher_prompt.txt", "r") as f:
@@ -22,7 +22,8 @@ def save_chat_history(messages):
         
         for msg in messages:
             role = "User" if msg["role"] == "user" else "Researcher"
-            f.write(f"{role}:\n{msg['content']}\n\n")
+            content = msg["parts"][0] if isinstance(msg.get("parts"), list) else msg.get("content", "")
+            f.write(f"{role}:\n{content}\n\n")
             f.write("-"*80 + "\n\n")
     
     return filename
@@ -40,21 +41,28 @@ I'm conducting research on user experience with AI-generated content for Hula ap
 
 Hula helps users create amazing AI-generated photos and videos. I'd love to learn about your experience with similar tools!
 
-**To start, could you tell me:**
-- Do you currently use any AI tools for creating photos or videos?
-- If yes, which ones and what do you create with them?"""
+To start, could you tell me: Do you currently use any AI tools for creating photos or videos?"""
     
-    st.session_state.messages.append({"role": "assistant", "content": welcome_message})
+    st.session_state.messages.append({"role": "model", "parts": [welcome_message]})
     
 if "system_prompt" not in st.session_state:
     st.session_state.system_prompt = load_prompt()
 
+if "model" not in st.session_state:
+    st.session_state.model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash-exp",
+        system_instruction=st.session_state.system_prompt
+    )
+    st.session_state.chat = st.session_state.model.start_chat(history=[])
+
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    role = "user" if message["role"] == "user" else "assistant"
+    content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
+    with st.chat_message(role):
+        st.markdown(content)
 
 if prompt := st.chat_input("Share your thoughts..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "parts": [prompt]})
     
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -63,17 +71,11 @@ if prompt := st.chat_input("Share your thoughts..."):
         message_placeholder = st.empty()
         
         try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2000,
-                system=st.session_state.system_prompt,
-                messages=st.session_state.messages
-            )
-            
-            full_response = response.content[0].text
+            response = st.session_state.chat.send_message(prompt)
+            full_response = response.text
             message_placeholder.markdown(full_response)
             
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            st.session_state.messages.append({"role": "model", "parts": [full_response]})
             
         except Exception as e:
             message_placeholder.error(f"Error: {str(e)}")
@@ -90,6 +92,7 @@ with st.sidebar:
     
     if st.button("Clear Chat"):
         st.session_state.messages = []
+        st.session_state.chat = st.session_state.model.start_chat(history=[])
         st.rerun()
     
     st.divider()
