@@ -1,7 +1,8 @@
 import streamlit as st
+from streamlit_chat import message
 import streamlit.components.v1 as components
-import base64
 import google.generativeai as genai
+import base64
 import os
 from dotenv import load_dotenv
 from datetime import datetime
@@ -23,9 +24,8 @@ def save_chat_history(messages):
         f.write("="*80 + "\n\n")
         
         for msg in messages:
-            role = "User" if msg["role"] == "user" else "Researcher"
-            content = msg["parts"][0] if isinstance(msg.get("parts"), list) else msg.get("content", "")
-            f.write(f"{role}:\n{content}\n\n")
+            role = "User" if msg["is_user"] else "Assistant"
+            f.write(f"{role}:\n{msg['message']}\n\n")
             f.write("-"*80 + "\n\n")
     
     return filename
@@ -35,6 +35,7 @@ st.set_page_config(page_title="Hula Researcher Chat", page_icon="🎨")
 st.title("Hula Research Chat")
 st.caption("Share your experience with AI-generated content")
 
+# Initialize session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
     welcome_message = """Hello! 👋
@@ -45,7 +46,7 @@ Hula helps users create amazing AI-generated photos and videos. I'd love to lear
 
 To start, could you tell me: Do you currently use any AI tools for creating photos or videos?"""
     
-    st.session_state.messages.append({"role": "model", "parts": [welcome_message]})
+    st.session_state.messages.append({"message": welcome_message, "is_user": False})
 
 if "last_audio" not in st.session_state:
     st.session_state.last_audio = ""
@@ -60,104 +61,63 @@ if "model" not in st.session_state:
     )
     st.session_state.chat = st.session_state.model.start_chat(history=[])
 
-# Display chat messages
-for message in st.session_state.messages:
-    role = "user" if message["role"] == "user" else "assistant"
-    content = message["parts"][0] if isinstance(message.get("parts"), list) else message.get("content", "")
-    with st.chat_message(role):        st.markdown(content)
+# Display chat messages using streamlit-chat
+for i, msg in enumerate(st.session_state.messages):
+    message(msg["message"], is_user=msg["is_user"], key=str(i))
 
-# Custom CSS для улучшения визуала
-st.markdown("""
-<style>
-    .element-container:has(iframe) {
-        margin-bottom: 0px !important;
-        padding-bottom: 0px !important;
-    }
-    .stChatInputContainer {
-        padding-top: 0px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Input area - text field and voice button side by side
+# Chat input area - at the bottom
 col1, col2 = st.columns([11, 1])
 
 with col1:
-    prompt = st.chat_input("Message")
+    user_input = st.text_input("Type your message...", key="user_input", label_visibility="collapsed")
 
 with col2:
     audio_base64 = components.html(
         open("components/audio_recorder.html", "r").read(),
-        height=56,
-    )
-
-# Input area with text input and voice recorder side by side
-col1, col2 = st.columns([5, 1])
-
-with col1:
-    prompt = st.chat_input("Type your message or use voice 🎤")
-
-with col2:
-    st.write("")  # Add some spacing to align with chat input
-    audio_base64 = components.html(
-        open("components/audio_recorder.html", "r").read(),
-        height=50,
+        height=48
     )
 
 # Handle text input
-if prompt:
-    st.session_state.messages.append({"role": "user", "parts": [prompt]})
+if user_input and st.session_state.get("last_input") != user_input:
+    st.session_state["last_input"] = user_input
+    st.session_state.messages.append({"message": user_input, "is_user": True})
     
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        
-        try:
-            response = st.session_state.chat.send_message(prompt)
-            full_response = response.text
-            message_placeholder.markdown(full_response)
-            
-            st.session_state.messages.append({"role": "model", "parts": [full_response]})
-            
-        except Exception as e:
-            message_placeholder.error(f"Error: {str(e)}")
+    try:
+        response = st.session_state.chat.send_message(user_input)
+        full_response = response.text
+        st.session_state.messages.append({"message": full_response, "is_user": False})
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
 
 # Handle voice input
-if audio_base64 is not None and audio_base64 != "" and audio_base64 != st.session_state.get("last_audio", ""):
-    st.session_state["last_audio"] = audio_base64  # Предотвращаем повторную обработку
+if audio_base64 is not None and isinstance(audio_base64, str) and audio_base64 != "" and audio_base64 != st.session_state.get("last_audio", ""):
+    st.session_state["last_audio"] = audio_base64
     
-    with st.chat_message("user"):
-        st.write("🎤 Voice message")
-    
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
+    try:
+        audio_bytes = base64.b64decode(audio_base64)
         
-        try:
-            # Decode base64 audio
-            audio_bytes = base64.b64decode(audio_base64)
-            
-            # Save temporarily
-            with open("temp_audio.wav", "wb") as f:
-                f.write(audio_bytes)
-            
-            # Upload to Gemini
-            uploaded_file = genai.upload_file(path="temp_audio.wav")
-            response = st.session_state.chat.send_message(["Transcribe this audio and respond to what the person said:", uploaded_file])
-            
-            full_response = response.text
-            message_placeholder.markdown(full_response)
-            
-            st.session_state.messages.append({"role": "user", "parts": ["🎤 Voice message"]})
-            st.session_state.messages.append({"role": "model", "parts": [full_response]})
-            
-            # Clean up
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_bytes)
+        
+        uploaded_file = genai.upload_file(path="temp_audio.wav")
+        transcription = st.session_state.chat.send_message(["Transcribe this audio to text only, no commentary:", uploaded_file])
+        text_content = transcription.text.strip()
+        
+        st.session_state.messages.append({"message": text_content, "is_user": True})
+        
+        response = st.session_state.chat.send_message(text_content)
+        full_response = response.text
+        st.session_state.messages.append({"message": full_response, "is_user": False})
+        
+        if os.path.exists("temp_audio.wav"):
             os.remove("temp_audio.wav")
-            st.rerun()
-            
-        except Exception as e:
-            message_placeholder.error(f"Error processing audio: {str(e)}")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Error processing audio: {str(e)}")
+
+# Sidebar
 with st.sidebar:
     st.header("Chat Controls")
     
