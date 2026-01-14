@@ -1,5 +1,5 @@
 import streamlit as st
-from st_audiorec import st_audiorec
+from audiorecorder import audiorecorder
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -62,8 +62,7 @@ for message in st.session_state.messages:
     with st.chat_message(role):
         st.markdown(content)
 # Audio recorder
-audio_data = st_audiorec()
-
+audio_data = audiorecorder("Click to record", "Recording...")
 if audio_data is not None:
     with st.chat_message("user"):
         st.audio(audio_data, format='audio/wav')
